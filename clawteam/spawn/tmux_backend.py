@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import shlex
@@ -10,6 +11,7 @@ import subprocess
 import tempfile
 import time
 
+from clawteam.fileutil import file_locked
 from clawteam.spawn.adapters import (
     NativeCliAdapter,
     is_claude_command,
@@ -70,13 +72,15 @@ class TmuxBackend(SpawnBackend):
         if env_vars.get("TERM", "").lower() == "dumb":
             env_vars["TERM"] = "xterm-256color"
         env_vars.setdefault("CLAWTEAM_DATA_DIR", str(get_data_dir()))
-        env_vars.update({
-            "CLAWTEAM_AGENT_ID": agent_id,
-            "CLAWTEAM_AGENT_NAME": agent_name,
-            "CLAWTEAM_AGENT_TYPE": agent_type,
-            "CLAWTEAM_TEAM_NAME": team_name,
-            "CLAWTEAM_AGENT_LEADER": "1" if is_leader else "0",
-        })
+        env_vars.update(
+            {
+                "CLAWTEAM_AGENT_ID": agent_id,
+                "CLAWTEAM_AGENT_NAME": agent_name,
+                "CLAWTEAM_AGENT_TYPE": agent_type,
+                "CLAWTEAM_TEAM_NAME": team_name,
+                "CLAWTEAM_AGENT_LEADER": "1" if is_leader else "0",
+            }
+        )
         if cwd:
             env_vars["CLAWTEAM_WORKSPACE_DIR"] = cwd
         # Inject context awareness flags
@@ -107,7 +111,9 @@ class TmuxBackend(SpawnBackend):
         validation_command = normalized_command
         final_command = list(prepared.final_command)
         post_launch_prompt = prepared.post_launch_prompt
-        if system_prompt and (is_claude_command(normalized_command) or is_pi_command(normalized_command)):
+        if system_prompt and (
+            is_claude_command(normalized_command) or is_pi_command(normalized_command)
+        ):
             insert_at = final_command.index("-p") if "-p" in final_command else len(final_command)
             final_command[insert_at:insert_at] = ["--append-system-prompt", system_prompt]
         resume_base = build_resume_command(normalized_command)
@@ -126,7 +132,9 @@ class TmuxBackend(SpawnBackend):
                 is_claude_command(resume_prepared.normalized_command)
                 or is_pi_command(resume_prepared.normalized_command)
             ):
-                insert_at = resume_command.index("-p") if "-p" in resume_command else len(resume_command)
+                insert_at = (
+                    resume_command.index("-p") if "-p" in resume_command else len(resume_command)
+                )
                 resume_command[insert_at:insert_at] = ["--append-system-prompt", system_prompt]
 
         command_error = validate_spawn_command(validation_command, path=env_vars["PATH"], cwd=cwd)
@@ -200,7 +208,8 @@ class TmuxBackend(SpawnBackend):
         if is_leader:
             subprocess.run(
                 ["tmux", "set-option", "-t", target, "remain-on-exit", "on"],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
             )
 
         # Set tmux native hooks for reliable lifecycle management
@@ -214,14 +223,14 @@ class TmuxBackend(SpawnBackend):
             f"--agent {shlex.quote(agent_name)}"
         )
         subprocess.run(
-            ["tmux", "set-hook", "-t", target, "pane-exited",
-             f"run-shell '{_exit_hook_cmd}'"],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            ["tmux", "set-hook", "-t", target, "pane-exited", f"run-shell '{_exit_hook_cmd}'"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
         subprocess.run(
-            ["tmux", "set-hook", "-t", target, "pane-died",
-             f"run-shell '{_crash_hook_cmd}'"],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            ["tmux", "set-hook", "-t", target, "pane-died", f"run-shell '{_crash_hook_cmd}'"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
 
         from clawteam.config import load_config
@@ -288,7 +297,8 @@ class TmuxBackend(SpawnBackend):
         pane_pid = 0
         pid_result = subprocess.run(
             ["tmux", "list-panes", "-t", target, "-F", "#{pane_pid}"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         if pid_result.returncode == 0 and pid_result.stdout.strip():
             try:
@@ -298,6 +308,7 @@ class TmuxBackend(SpawnBackend):
 
         # Persist spawn info for liveness checking
         from clawteam.spawn.registry import register_agent
+
         register_agent(
             team_name=team_name,
             agent_name=agent_name,
@@ -317,13 +328,16 @@ class TmuxBackend(SpawnBackend):
         try:
             from clawteam.events.global_bus import get_event_bus
             from clawteam.events.types import AfterWorkerSpawn
-            get_event_bus().emit_async(AfterWorkerSpawn(
-                team_name=team_name,
-                agent_name=agent_name,
-                agent_id=agent_id,
-                backend="tmux",
-                target=target,
-            ))
+
+            get_event_bus().emit_async(
+                AfterWorkerSpawn(
+                    team_name=team_name,
+                    agent_name=agent_name,
+                    agent_id=agent_id,
+                    backend="tmux",
+                    target=target,
+                )
+            )
         except Exception:
             pass
 
@@ -383,14 +397,16 @@ class TmuxBackend(SpawnBackend):
         # Count current panes in window 0
         pane_count = subprocess.run(
             ["tmux", "list-panes", "-t", f"{session}:0"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         num_panes = len(pane_count.stdout.strip().splitlines()) if pane_count.returncode == 0 else 0
 
         # Get windows
         result = subprocess.run(
             ["tmux", "list-windows", "-t", session, "-F", "#{window_index}"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         if result.returncode != 0:
             return f"Error: failed to list windows: {result.stderr.strip()}"
@@ -406,19 +422,24 @@ class TmuxBackend(SpawnBackend):
             for w in windows[1:]:
                 subprocess.run(
                     ["tmux", "join-pane", "-s", f"{session}:{w}", "-t", f"{session}:{first}", "-h"],
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
                 )
             subprocess.run(
                 ["tmux", "select-layout", "-t", f"{session}:{first}", "tiled"],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
             )
 
         # Recount
         pane_count = subprocess.run(
             ["tmux", "list-panes", "-t", f"{session}:0"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
-        final_panes = len(pane_count.stdout.strip().splitlines()) if pane_count.returncode == 0 else 0
+        final_panes = (
+            len(pane_count.stdout.strip().splitlines()) if pane_count.returncode == 0 else 0
+        )
         return f"Tiled {final_panes} panes in {session}"
 
     @staticmethod
@@ -431,6 +452,7 @@ class TmuxBackend(SpawnBackend):
         session = TmuxBackend.session_name(team_name)
         subprocess.run(["tmux", "attach-session", "-t", session])
         return result
+
 
 def _confirm_workspace_trust_if_prompted(
     target: str,
@@ -521,7 +543,9 @@ def _looks_like_workspace_trust_prompt(command: list[str], pane_text: str) -> bo
 
     if is_claude_command(command):
         return ("trust this folder" in pane_text or "trust the contents" in pane_text) and (
-            "enter to confirm" in pane_text or "press enter" in pane_text or "enter to continue" in pane_text
+            "enter to confirm" in pane_text
+            or "press enter" in pane_text
+            or "enter to continue" in pane_text
         )
 
     if is_codex_command(command):
@@ -689,46 +713,55 @@ def _inject_prompt_via_buffer(
     agent_name: str,
     prompt: str,
 ) -> None:
-    """Inject a prompt into a tmux pane via ``load-buffer`` / ``paste-buffer``.
+    """Deliver multiline text as one paste, serializing writers to this target.
 
-    Using a temp file avoids the shell-escaping pitfalls of ``send-keys`` for
-    multi-line or special-character prompts. Two Enter keystrokes are sent
-    after the paste to confirm and submit.
+    Bracketed paste keeps notification newlines from acting as individual Enter
+    presses in interactive CLIs. A unique buffer prevents concurrent agents from
+    replacing each other's content in tmux's server-wide buffer namespace.
     """
-    buf_name = f"prompt-{agent_name}"
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".txt", delete=False, prefix="clawteam-prompt-"
-    ) as f:
-        f.write(prompt)
-        tmp_path = f.name
-
-    try:
-        subprocess.run(
-            ["tmux", "load-buffer", "-b", buf_name, tmp_path],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        subprocess.run(
-            ["tmux", "paste-buffer", "-b", buf_name, "-t", target],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        time.sleep(0.5)
-        subprocess.run(
-            ["tmux", "send-keys", "-t", target, "Enter"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        time.sleep(0.3)
-        subprocess.run(
-            ["tmux", "send-keys", "-t", target, "Enter"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        subprocess.run(
-            ["tmux", "delete-buffer", "-b", buf_name],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-    finally:
-        os.unlink(tmp_path)
+    lock_name = hashlib.sha256(target.encode("utf-8")).hexdigest()
+    lock_path = get_data_dir() / "locks" / "tmux-injection" / lock_name
+    with file_locked(lock_path):
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".txt", delete=False, prefix="clawteam-prompt-"
+        ) as f:
+            f.write(prompt)
+            tmp_path = f.name
+        buf_name = f"prompt-{agent_name}-{os.path.basename(tmp_path)}"
+        try:
+            subprocess.run(
+                ["tmux", "load-buffer", "-b", buf_name, tmp_path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+            subprocess.run(
+                ["tmux", "paste-buffer", "-b", buf_name, "-p", "-r", "-t", target],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+            time.sleep(0.5)
+            subprocess.run(
+                ["tmux", "send-keys", "-t", target, "Enter"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+            time.sleep(0.3)
+            subprocess.run(
+                ["tmux", "send-keys", "-t", target, "Enter"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+        finally:
+            try:
+                subprocess.run(
+                    ["tmux", "delete-buffer", "-b", buf_name],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    check=False,
+                )
+            finally:
+                os.unlink(tmp_path)

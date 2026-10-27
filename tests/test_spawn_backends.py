@@ -120,10 +120,11 @@ def test_subprocess_backend_discards_output_and_preserves_exit_hook_and_registry
     assert captured["stdout"] is subprocess.DEVNULL
     assert captured["stderr"] is subprocess.DEVNULL
     assert captured["cwd"] == "/tmp/demo"
+    assert f"{clawteam_bin} lifecycle on-exit --team demo-team --agent worker1" in captured["cmd"]
     assert (
-        f"{clawteam_bin} lifecycle on-exit --team demo-team --agent worker1" in captured["cmd"]
+        f"{clawteam_bin} lifecycle should-keepalive --team demo-team --agent worker1"
+        in captured["cmd"]
     )
-    assert f"{clawteam_bin} lifecycle should-keepalive --team demo-team --agent worker1" in captured["cmd"]
     assert registered == {
         "team_name": "demo-team",
         "agent_name": "worker1",
@@ -184,7 +185,9 @@ def test_tmux_backend_exports_spawn_path_for_agent_commands(monkeypatch, tmp_pat
         "clawteam.spawn.tmux_backend._wait_for_cli_ready",
         lambda *_, **__: True,
     )
-    monkeypatch.setattr("clawteam.spawn.tmux_backend._inject_prompt_via_buffer", lambda *_, **__: None)
+    monkeypatch.setattr(
+        "clawteam.spawn.tmux_backend._inject_prompt_via_buffer", lambda *_, **__: None
+    )
     monkeypatch.setattr("clawteam.spawn.registry.register_agent", lambda **_: None)
 
     backend = TmuxBackend()
@@ -203,19 +206,40 @@ def test_tmux_backend_exports_spawn_path_for_agent_commands(monkeypatch, tmp_pat
     full_cmd = new_session[-1]
     # Env vars are now written to a temp file and sourced, not inlined
     import re as _re
-    env_file_match = _re.search(r"\.\s+(?:'([^']*/clawteam-env-[^']+\.env\.sh)'|([^\s;]*/clawteam-env-[^;\s]+\.env\.sh))", full_cmd)
+
+    env_file_match = _re.search(
+        r"\.\s+(?:'([^']*/clawteam-env-[^']+\.env\.sh)'|([^\s;]*/clawteam-env-[^;\s]+\.env\.sh))",
+        full_cmd,
+    )
     assert env_file_match, f"env source command not found in: {full_cmd}"
     env_file_path = env_file_match.group(1) or env_file_match.group(2)
     env_file_content = open(env_file_path).read()
     # PATH should contain the clawteam bin directory
-    assert any(str(clawteam_bin.parent) in line for line in env_file_content.splitlines() if line.startswith("export PATH="))
-    assert any(str(clawteam_bin) in line for line in env_file_content.splitlines() if line.startswith("export CLAWTEAM_BIN="))
-    assert any("/tmp/oh-data" in line for line in env_file_content.splitlines() if line.startswith("export CLAWTEAM_DATA_DIR="))
-    assert any("demo-project" in line for line in env_file_content.splitlines() if line.startswith("export GOOGLE_CLOUD_PROJECT="))
+    assert any(
+        str(clawteam_bin.parent) in line
+        for line in env_file_content.splitlines()
+        if line.startswith("export PATH=")
+    )
+    assert any(
+        str(clawteam_bin) in line
+        for line in env_file_content.splitlines()
+        if line.startswith("export CLAWTEAM_BIN=")
+    )
+    assert any(
+        "/tmp/oh-data" in line
+        for line in env_file_content.splitlines()
+        if line.startswith("export CLAWTEAM_DATA_DIR=")
+    )
+    assert any(
+        "demo-project" in line
+        for line in env_file_content.splitlines()
+        if line.startswith("export GOOGLE_CLOUD_PROJECT=")
+    )
     assert "cd /tmp/demo &&" in full_cmd
     assert "PROGRAMFILES(X86)" not in env_file_content
     # Cleanup env file
     import os as _os
+
     _os.unlink(env_file_path)
     # Exit hook is now set via tmux set-hook (not inline in command string)
     set_hook_calls = [c for c in run_calls if c[:2] == ["tmux", "set-hook"]]
@@ -263,7 +287,9 @@ def test_tmux_backend_uses_configured_timeout_for_workspace_trust_prompt(monkeyp
             return "/usr/bin/codex"
         return original_which(name, path=path)
 
-    monkeypatch.setattr("clawteam.config.load_config", lambda: ClawTeamConfig(spawn_ready_timeout=42.0))
+    monkeypatch.setattr(
+        "clawteam.config.load_config", lambda: ClawTeamConfig(spawn_ready_timeout=42.0)
+    )
     monkeypatch.setattr("clawteam.spawn.tmux_backend.shutil.which", fake_which)
     monkeypatch.setattr("clawteam.spawn.command_validation.shutil.which", fake_which)
     monkeypatch.setattr("clawteam.spawn.tmux_backend.subprocess.run", fake_run)
@@ -280,7 +306,9 @@ def test_tmux_backend_uses_configured_timeout_for_workspace_trust_prompt(monkeyp
         "clawteam.spawn.tmux_backend._wait_for_cli_ready",
         lambda *_, **__: True,
     )
-    monkeypatch.setattr("clawteam.spawn.tmux_backend._inject_prompt_via_buffer", lambda *_, **__: None)
+    monkeypatch.setattr(
+        "clawteam.spawn.tmux_backend._inject_prompt_via_buffer", lambda *_, **__: None
+    )
     monkeypatch.setattr("clawteam.spawn.registry.register_agent", lambda **_: None)
 
     backend = TmuxBackend()
@@ -535,11 +563,7 @@ def test_tmux_backend_confirms_claude_workspace_trust_prompt(monkeypatch):
             capture_count += 1
             if capture_count == 1:
                 return Result(
-                    stdout=(
-                        "Quick safety check\n"
-                        "Yes, I trust this folder\n"
-                        "Enter to confirm\n"
-                    )
+                    stdout=("Quick safety check\nYes, I trust this folder\nEnter to confirm\n")
                 )
             return Result(stdout="")
         return Result()
@@ -597,10 +621,7 @@ def test_tmux_backend_confirms_codex_workspace_trust_prompt(monkeypatch):
         run_calls.append(args)
         if args[:4] == ["tmux", "capture-pane", "-p", "-t"]:
             return Result(
-                stdout=(
-                    "Do you trust the contents of this directory?\n"
-                    "Press enter to continue\n"
-                )
+                stdout=("Do you trust the contents of this directory?\nPress enter to continue\n")
             )
         return Result()
 
@@ -666,7 +687,9 @@ def test_tmux_backend_waits_for_pane_before_declaring_failure(monkeypatch, tmp_p
         "clawteam.spawn.tmux_backend._wait_for_cli_ready",
         lambda *_, **__: True,
     )
-    monkeypatch.setattr("clawteam.spawn.tmux_backend._inject_prompt_via_buffer", lambda *_, **__: None)
+    monkeypatch.setattr(
+        "clawteam.spawn.tmux_backend._inject_prompt_via_buffer", lambda *_, **__: None
+    )
     monkeypatch.setattr("clawteam.spawn.registry.register_agent", lambda **_: None)
 
     backend = TmuxBackend()
@@ -937,12 +960,7 @@ def test_tmux_backend_confirms_gemini_workspace_trust_prompt(monkeypatch):
     def fake_run(args, **kwargs):
         run_calls.append(args)
         if args[:4] == ["tmux", "capture-pane", "-p", "-t"]:
-            return Result(
-                stdout=(
-                    "Gemini CLI\n"
-                    "Trust folder: /tmp/demo\n"
-                )
-            )
+            return Result(stdout=("Gemini CLI\nTrust folder: /tmp/demo\n"))
         return Result()
 
     monkeypatch.setattr("clawteam.spawn.tmux_backend.subprocess.run", fake_run)
@@ -1111,8 +1129,7 @@ def test_build_docker_clawteam_runtime_includes_wrapper_venv_and_source(monkeypa
     wrapper = tmp_path / "bin" / "clawteam"
     wrapper.parent.mkdir(parents=True)
     wrapper.write_text(
-        "#!/usr/bin/env bash\n"
-        f"exec {tmp_path}/venv/bin/python -m clawteam.cli.commands \"$@\"\n"
+        f'#!/usr/bin/env bash\nexec {tmp_path}/venv/bin/python -m clawteam.cli.commands "$@"\n'
     )
     (tmp_path / "venv" / "bin").mkdir(parents=True)
 
@@ -1443,13 +1460,6 @@ def test_inject_prompt_via_buffer_uses_load_and_paste(monkeypatch, tmp_path):
 
     monkeypatch.setattr("clawteam.spawn.tmux_backend.subprocess.run", fake_run)
     monkeypatch.setattr("clawteam.spawn.tmux_backend.time.sleep", lambda _: None)
-    monkeypatch.setattr("clawteam.spawn.tmux_backend.tempfile.NamedTemporaryFile",
-                        lambda **kw: open(tmp_path / "prompt.txt", kw.get("mode", "w")))
-    # NamedTemporaryFile mock won't have .name → use real tempfile
-    monkeypatch.undo()  # just use real functions
-    monkeypatch.setattr("clawteam.spawn.tmux_backend.subprocess.run", fake_run)
-    monkeypatch.setattr("clawteam.spawn.tmux_backend.time.sleep", lambda _: None)
-
     _inject_prompt_via_buffer("sess:win", "worker1", "hello world")
 
     cmds = [c[:3] for c in run_calls]
@@ -1471,7 +1481,9 @@ def test_tmux_backend_runtime_injection_returns_false_when_target_missing(monkey
             return Result(returncode=1, stderr="can't find session")
         return Result()
 
-    monkeypatch.setattr("clawteam.spawn.tmux_backend.shutil.which", lambda *_args, **_kwargs: "/usr/bin/tmux")
+    monkeypatch.setattr(
+        "clawteam.spawn.tmux_backend.shutil.which", lambda *_args, **_kwargs: "/usr/bin/tmux"
+    )
     monkeypatch.setattr("clawteam.spawn.tmux_backend.subprocess.run", fake_run)
 
     ok, reason = TmuxBackend().inject_runtime_message(
@@ -1499,7 +1511,9 @@ def test_wsh_backend_runtime_injection_uses_registered_block(monkeypatch, tmp_pa
             sent.append((block_id, data))
             return True
 
-    monkeypatch.setattr("clawteam.spawn.wsh_backend._is_block_alive", lambda block_id: block_id == "block-1")
+    monkeypatch.setattr(
+        "clawteam.spawn.wsh_backend._is_block_alive", lambda block_id: block_id == "block-1"
+    )
 
     backend = WshBackend()
     backend._rpc_client = StubRpcClient()
