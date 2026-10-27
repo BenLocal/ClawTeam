@@ -121,41 +121,22 @@
             -webkit-text-fill-color: transparent;
         }
 
-        .team-selector {
-            margin-bottom: auto;
+        .sidebar { flex-shrink: 0; min-height: 0; }
+        .team-selector { flex: 1; min-height: 0; overflow-y: auto; }
+        .team-selector h2 { font-size: 13px; color: var(--text-secondary); font-weight: 500; margin-bottom: 16px; }
+        .swarm-tree { display: flex; flex-direction: column; gap: 8px; }
+        .swarm-node {
+            display: flex; align-items: center; gap: 10px; width: 100%;
+            padding: 12px 10px; border: 0; border-radius: var(--radius-sm);
+            background: transparent; color: var(--text-secondary); cursor: pointer;
+            font-family: inherit; text-align: left;
         }
-        
-        .team-selector label {
-            display: block;
-            font-size: 13px;
-            color: var(--text-secondary);
-            margin-bottom: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            font-weight: 600;
-        }
-
-        .custom-select {
-            width: 100%;
-            padding: 14px 16px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-sm);
-            color: var(--text-primary);
-            font-family: inherit;
-            font-size: 15px;
-            font-weight: 500;
-            cursor: pointer;
-            outline: none;
-            transition: all 0.2s ease;
-        }
-        .custom-select:hover { border-color: var(--border-hover); background: rgba(255, 255, 255, 0.08); }
-        .custom-select:focus { border-color: var(--color-progress); box-shadow: 0 0 0 2px var(--accent-glow); }
-        .custom-select option {
-            background-color: #111111;
-            color: #ffffff;
-            padding: 12px;
-        }
+        .swarm-node:hover { color: var(--text-primary); background: var(--surface-hover); }
+        .swarm-node[aria-current="page"] { color: var(--text-primary); background: rgba(59,130,246,0.16); }
+        .swarm-name { min-width: 0; overflow-wrap: anywhere; font-size: 15px; font-weight: 500; }
+        .swarm-count { margin-left: auto; color: var(--text-secondary); font-size: 12px; }
+        .swarm-node:focus-visible { outline: 2px solid var(--color-progress); outline-offset: 2px; }
+        .tree-message { color: var(--text-secondary); font-size: 14px; line-height: 1.5; }
 
         .connection-status {
             display: flex;
@@ -421,12 +402,12 @@
                 ClawTeam
             </div>
 
-            <div class="team-selector">
-                <label for="team-select">Active Swarm</label>
-                <select id="team-select" class="custom-select">
-                    <option value="">Initializing Core...</option>
-                </select>
-            </div>
+            <nav class="team-selector" aria-labelledby="swarm-heading">
+                <h2 id="swarm-heading">Active swarm</h2>
+                <div id="swarm-tree" class="swarm-tree">
+                    <p class="tree-message" role="status">Loading teams...</p>
+                </div>
+            </nav>
 
             <div class="connection-status">
                 <div class="status-dot" id="status-dot"></div>
@@ -461,6 +442,22 @@
         </div>
     </div>
 
+    <!-- Team Prompt Modal -->
+    <div class="modal-overlay" id="team-prompt-modal" role="dialog" aria-modal="true" aria-labelledby="team-prompt-title">
+        <div class="modal-content glass-panel" style="width:min(720px, calc(100vw - 32px)); max-height:calc(100vh - 32px); overflow-y:auto;">
+            <h3 id="team-prompt-title">Team Prompt</h3>
+            <p style="color:var(--text-secondary); margin-bottom:16px;">Shared instructions for this team: code repositories, test environments, issue trackers, Vikunja projects, and working agreements. New agents load these when they start; current members receive an inbox update.</p>
+            <label for="team-prompt-text" style="display:block; margin-bottom:8px;">Instructions</label>
+            <textarea id="team-prompt-text" class="modal-input" rows="12" maxlength="65536" style="resize:vertical;" placeholder="Repository and branches&#10;Test environment and commands&#10;Issue tracker / Vikunja project&#10;Development and testing workflow"></textarea>
+            <p style="color:var(--text-secondary);">Save empty text to clear the team prompt. Keep passwords and tokens in environment variables.</p>
+            <p id="team-prompt-status" role="status" aria-live="polite" style="margin-top:12px;"></p>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeTeamPromptModal()">Close</button>
+                <button class="action-btn" id="team-prompt-save" onclick="saveTeamPrompt()">Save Prompt</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Context Modal -->
     <div class="modal-overlay" id="context-modal">
         <div class="modal-content glass-panel" style="width: 600px;">
@@ -485,7 +482,8 @@
 
 <script>
     // Elements
-    const teamSelect = document.getElementById('team-select');
+    const swarmTree = document.getElementById('swarm-tree');
+    const teamNodes = new Map();
     const statusDot = document.getElementById('status-dot');
     const statusText = document.getElementById('status-text');
     const mainView = document.getElementById('main-view');
@@ -502,42 +500,91 @@
             .replace(/'/g, '&#39;');
     }
 
-    // Initialize
-    async function init() {
-        try {
-            const res = await fetch('/api/overview');
-            const teams = await res.json();
-
-            teamSelect.replaceChildren();
-            const defaultOption = document.createElement('option');
-            defaultOption.value = '';
-            defaultOption.textContent = 'Select Team';
-            teamSelect.appendChild(defaultOption);
-            teams.forEach((t) => {
-                const option = document.createElement('option');
-                option.value = t.name || '';
-                option.textContent = `${t.name || ''}${t.description ? ` - ${t.description}` : ''}`;
-                teamSelect.appendChild(option);
-            });
-            
-            if (teams.length > 0) {
-                teamSelect.value = teams[0].name;
-                switchTeam(teams[0].name);
-            }
-            
-            teamSelect.addEventListener('change', (e) => switchTeam(e.target.value));
-        } catch (e) {
-            console.error("Failed to load overview", e);
-            teamSelect.innerHTML = '<option value="">Error loading teams</option>';
+    function renderTeamTree(teams) {
+        swarmTree.replaceChildren();
+        teamNodes.clear();
+        for (const team of teams) {
+            const node = document.createElement('button');
+            node.type = 'button';
+            node.className = 'swarm-node';
+            node.dataset.team = team.name;
+            node.title = team.description || team.name;
+            const name = document.createElement('span');
+            name.className = 'swarm-name';
+            name.textContent = team.name;
+            const count = document.createElement('span');
+            count.className = 'swarm-count';
+            count.textContent = team.members || 0;
+            count.setAttribute('aria-label', (team.members || 0) + ' members');
+            node.append(name, count);
+            node.addEventListener('click', () => switchTeam(team.name));
+            swarmTree.appendChild(node);
+            teamNodes.set(team.name, node);
+        }
+        if (!teams.length) {
+            const message = document.createElement('p');
+            message.className = 'tree-message';
+            message.textContent = 'No teams available.';
+            swarmTree.appendChild(message);
         }
     }
 
-    function switchTeam(teamName) {
+    function selectedTeamFromURL() {
+        const requested = new URL(window.location.href).searchParams.get('team');
+        return teamNodes.has(requested) ? requested : (teamNodes.keys().next().value || '');
+    }
+
+    function updateTeamNavigation(teamName, historyMode) {
+        for (const [name, node] of teamNodes) {
+            if (name === teamName) {
+                node.setAttribute('aria-current', 'page');
+            } else {
+                node.removeAttribute('aria-current');
+            }
+        }
+        const url = new URL(window.location.href);
+        if (teamName) url.searchParams.set('team', teamName);
+        else url.searchParams.delete('team');
+        if (url.href !== window.location.href) {
+            if (historyMode === 'replace') window.history.replaceState(null, '', url);
+            else window.history.pushState(null, '', url);
+        }
+    }
+
+    // Initialize
+    async function init() {
+        try {
+            const response = await fetch('/api/overview');
+            if (!response.ok) throw new Error('Failed to load teams');
+            const teams = await response.json();
+            if (!Array.isArray(teams)) throw new Error('Invalid team list');
+            renderTeamTree(teams);
+            switchTeam(selectedTeamFromURL(), { historyMode: 'replace' });
+        } catch (error) {
+            console.error('Failed to load overview', error);
+            const message = document.createElement('p');
+            message.className = 'tree-message';
+            message.setAttribute('role', 'alert');
+            message.textContent = 'Unable to load teams. Reload to retry.';
+            swarmTree.replaceChildren(message);
+        }
+    }
+
+    window.addEventListener('popstate', () => {
+        switchTeam(selectedTeamFromURL(), { historyMode: 'replace' });
+    });
+
+    function switchTeam(teamName, { historyMode = 'push' } = {}) {
+        if (teamName && !teamNodes.has(teamName)) return;
+        closeTeamPromptModal();
+        updateTeamNavigation(teamName, historyMode);
+        if (currentTeam === teamName && currentEventSource) return;
         if (currentEventSource) {
             currentEventSource.close();
             currentEventSource = null;
         }
         currentTeam = teamName;
+        lastDataStr = '';
         
         if (!teamName) {
             setConnectionStatus(false);
@@ -560,6 +607,7 @@
         currentEventSource = new EventSource('/api/events/' + encodeURIComponent(teamName));
         
         currentEventSource.onmessage = (e) => {
+            if (currentTeam !== teamName) return;
             setConnectionStatus(true);
             try {
                 const data = JSON.parse(e.data);
@@ -574,6 +622,7 @@
         };
 
         currentEventSource.onerror = () => {
+            if (currentTeam !== teamName) return;
             setConnectionStatus(false);
         };
     }
@@ -597,6 +646,8 @@
                     <div class="header-meta" id="ui-meta">Establishing neural connection...</div>
                 </div>
                 <div style="display:flex; gap:12px;">
+                    <button onclick="openLiveTerminals()" class="action-btn" id="btn-live-terminals">Live terminals</button>
+                    <button onclick="openTeamPromptModal()" class="action-btn" id="btn-team-prompt">Team Prompt</button>
                     <button onclick="openContextModal()" style="display:none; background:rgba(168, 85, 247, 0.2); border-color:var(--color-completed); color:var(--color-completed);" id="btn-provide-context" class="action-btn">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
                         Set Context
@@ -783,6 +834,76 @@
         } finally {
             btn.innerText = oldText;
             btn.disabled = false;
+        }
+    }
+
+    function openLiveTerminals() {
+        if (!currentTeam) return;
+        const url = new URL('terminals.html', window.location.href);
+        url.searchParams.set('team', currentTeam);
+        window.open(url, '_blank', 'noopener');
+    }
+
+    // Team prompt operations
+    let promptTeam = null;
+    let promptRequest = 0;
+
+    function closeTeamPromptModal() {
+        promptRequest++;
+        promptTeam = null;
+        document.getElementById('team-prompt-modal').style.display = 'none';
+    }
+
+    async function openTeamPromptModal() {
+        if (!currentTeam) return;
+        const team = currentTeam;
+        const request = ++promptRequest;
+        promptTeam = team;
+        const input = document.getElementById('team-prompt-text');
+        const status = document.getElementById('team-prompt-status');
+        const button = document.getElementById('team-prompt-save');
+        document.getElementById('team-prompt-title').textContent = 'Team Prompt: ' + team;
+        document.getElementById('team-prompt-modal').style.display = 'flex';
+        input.value = '';
+        input.disabled = button.disabled = true;
+        status.textContent = 'Loading...';
+        try {
+            const response = await fetch('/api/team/' + encodeURIComponent(team) + '/prompt');
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Failed to load prompt');
+            if (request !== promptRequest) return;
+            input.value = data.prompt;
+            input.disabled = button.disabled = false;
+            status.textContent = '';
+            input.focus();
+        } catch (error) {
+            if (request === promptRequest) status.textContent = error.message;
+        }
+    }
+
+    async function saveTeamPrompt() {
+        if (!promptTeam) return;
+        const team = promptTeam;
+        const request = promptRequest;
+        const input = document.getElementById('team-prompt-text');
+        const status = document.getElementById('team-prompt-status');
+        const button = document.getElementById('team-prompt-save');
+        input.disabled = button.disabled = true;
+        status.textContent = 'Saving...';
+        try {
+            const response = await fetch('/api/team/' + encodeURIComponent(team) + '/prompt', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: input.value })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Failed to save prompt');
+            if (request !== promptRequest) return;
+            status.textContent = data.warning || ('Saved. Inbox updates sent to ' + data.notified + ' members.');
+        } catch (error) {
+            if (request === promptRequest) status.textContent = error.message;
+        } finally {
+            if (request === promptRequest) input.disabled = button.disabled = false;
         }
     }
 

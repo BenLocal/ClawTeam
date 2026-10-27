@@ -149,18 +149,42 @@ def test_spawn_cli_applies_profile_command_and_env(monkeypatch, tmp_path):
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["spawn", "subprocess", "--profile", "moonshot-kimi", "--team", "demo", "--agent-name", "alice", "--no-workspace", "--task", "say hi"],
-        env={"HOME": str(tmp_path), "CLAWTEAM_DATA_DIR": str(tmp_path / ".clawteam"), "MOONSHOT_API_KEY": "moonshot-secret"},
+        [
+            "spawn",
+            "subprocess",
+            "--profile",
+            "moonshot-kimi",
+            "--team",
+            "demo",
+            "--agent-name",
+            "alice",
+            "--no-workspace",
+            "--task",
+            "say hi",
+        ],
+        env={
+            "HOME": str(tmp_path),
+            "CLAWTEAM_DATA_DIR": str(tmp_path / ".clawteam"),
+            "MOONSHOT_API_KEY": "moonshot-secret",
+        },
     )
 
     assert result.exit_code == 0
     call = backend.calls[0]
-    assert call["command"] == ["kimi", "--model", "kimi-k2-thinking-turbo", "--config-file", "/tmp/kimi.toml"]
+    assert call["command"] == [
+        "kimi",
+        "--model",
+        "kimi-k2-thinking-turbo",
+        "--config-file",
+        "/tmp/kimi.toml",
+    ]
     assert call["env"]["KIMI_BASE_URL"] == "https://api.moonshot.cn/v1"
     assert call["env"]["KIMI_API_KEY"] == "moonshot-secret"
 
 
-def test_spawn_cli_uses_configured_default_profile_when_no_profile_or_command(monkeypatch, tmp_path):
+def test_spawn_cli_uses_configured_default_profile_when_no_profile_or_command(
+    monkeypatch, tmp_path
+):
     monkeypatch.setenv("GEMINI_API_KEY", "gemini-secret")
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("CLAWTEAM_DATA_DIR", str(tmp_path / ".clawteam"))
@@ -189,8 +213,22 @@ def test_spawn_cli_uses_configured_default_profile_when_no_profile_or_command(mo
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["spawn", "subprocess", "--team", "demo", "--agent-name", "alice", "--no-workspace", "--task", "say hi"],
-        env={"HOME": str(tmp_path), "CLAWTEAM_DATA_DIR": str(tmp_path / ".clawteam"), "GEMINI_API_KEY": "gemini-secret"},
+        [
+            "spawn",
+            "subprocess",
+            "--team",
+            "demo",
+            "--agent-name",
+            "alice",
+            "--no-workspace",
+            "--task",
+            "say hi",
+        ],
+        env={
+            "HOME": str(tmp_path),
+            "CLAWTEAM_DATA_DIR": str(tmp_path / ".clawteam"),
+            "GEMINI_API_KEY": "gemini-secret",
+        },
     )
 
     assert result.exit_code == 0
@@ -227,8 +265,22 @@ def test_spawn_cli_uses_single_profile_implicitly(monkeypatch, tmp_path):
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["spawn", "subprocess", "--team", "demo", "--agent-name", "alice", "--no-workspace", "--task", "say hi"],
-        env={"HOME": str(tmp_path), "CLAWTEAM_DATA_DIR": str(tmp_path / ".clawteam"), "MOONSHOT_API_KEY": "moonshot-secret"},
+        [
+            "spawn",
+            "subprocess",
+            "--team",
+            "demo",
+            "--agent-name",
+            "alice",
+            "--no-workspace",
+            "--task",
+            "say hi",
+        ],
+        env={
+            "HOME": str(tmp_path),
+            "CLAWTEAM_DATA_DIR": str(tmp_path / ".clawteam"),
+            "MOONSHOT_API_KEY": "moonshot-secret",
+        },
     )
 
     assert result.exit_code == 0
@@ -331,13 +383,29 @@ def test_launch_cli_applies_profile_to_template_agents(monkeypatch, tmp_path):
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["launch", "hedge-fund", "--team", "fund1", "--goal", "Analyze AAPL", "--profile", "moonshot-kimi"],
-        env={"HOME": str(tmp_path), "CLAWTEAM_DATA_DIR": str(tmp_path / ".clawteam"), "MOONSHOT_API_KEY": "moonshot-secret"},
+        [
+            "launch",
+            "hedge-fund",
+            "--team",
+            "fund1",
+            "--goal",
+            "Analyze AAPL",
+            "--profile",
+            "moonshot-kimi",
+        ],
+        env={
+            "HOME": str(tmp_path),
+            "CLAWTEAM_DATA_DIR": str(tmp_path / ".clawteam"),
+            "MOONSHOT_API_KEY": "moonshot-secret",
+        },
     )
 
     assert result.exit_code == 0
     assert backend.calls
-    assert all(call["command"][:3] == ["kimi", "--model", "kimi-k2-thinking-turbo"] for call in backend.calls)
+    assert all(
+        call["command"][:3] == ["kimi", "--model", "kimi-k2-thinking-turbo"]
+        for call in backend.calls
+    )
     assert all(call["env"]["KIMI_API_KEY"] == "moonshot-secret" for call in backend.calls)
 
 
@@ -497,7 +565,17 @@ def test_spawn_cli_replace_stops_running_agent_before_respawn(monkeypatch, tmp_p
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["spawn", "tmux", "claude", "--team", "demo", "--agent-name", "alice", "--no-workspace", "--replace"],
+        [
+            "spawn",
+            "tmux",
+            "claude",
+            "--team",
+            "demo",
+            "--agent-name",
+            "alice",
+            "--no-workspace",
+            "--replace",
+        ],
         env={"CLAWTEAM_DATA_DIR": str(tmp_path)},
     )
 
@@ -541,12 +619,34 @@ def test_spawn_cli_marks_only_actual_team_leader_as_leader(monkeypatch, tmp_path
     runner = CliRunner()
     leader_result = runner.invoke(
         app,
-        ["spawn", "tmux", "claude", "--team", "demo", "--agent-name", "leader", "--agent-type", "leader", "--no-workspace"],
+        [
+            "spawn",
+            "tmux",
+            "claude",
+            "--team",
+            "demo",
+            "--agent-name",
+            "leader",
+            "--agent-type",
+            "leader",
+            "--no-workspace",
+        ],
         env={"CLAWTEAM_DATA_DIR": str(tmp_path)},
     )
     worker_result = runner.invoke(
         app,
-        ["spawn", "tmux", "claude", "--team", "demo", "--agent-name", "worker", "--agent-type", "leader", "--no-workspace"],
+        [
+            "spawn",
+            "tmux",
+            "claude",
+            "--team",
+            "demo",
+            "--agent-name",
+            "worker",
+            "--agent-type",
+            "leader",
+            "--no-workspace",
+        ],
         env={"CLAWTEAM_DATA_DIR": str(tmp_path)},
     )
 
@@ -596,3 +696,20 @@ def test_spawn_cli_passes_repo_as_cwd_without_worktree_and_uses_repo_prompt(monk
     assert "Working directory: " + str(repo_path.resolve()) in call["prompt"]
     assert "Work directly in this repository path" in call["prompt"]
     assert "isolated git worktree" not in call["prompt"]
+
+
+def test_spawn_without_task_loads_team_prompt(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    TeamManager.create_team("demo", "leader", "leader001")
+    TeamManager.set_team_prompt("demo", "Use staging and Vikunja project 42.")
+    backend = RecordingBackend()
+    monkeypatch.setattr("clawteam.spawn.get_backend", lambda _: backend)
+
+    result = CliRunner().invoke(
+        app,
+        ["spawn", "tmux", "claude", "--team", "demo", "--agent-name", "worker", "--no-workspace"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "## Team Instructions" in backend.calls[0]["prompt"]
+    assert "Vikunja project 42" in backend.calls[0]["prompt"]

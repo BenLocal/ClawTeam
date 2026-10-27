@@ -9,7 +9,7 @@ def build_harness_system_prompt(team: str, agent_name: str) -> str:
     This is injected via --append-system-prompt when using `clawteam run` or
     `clawteam harness`, so the agent automatically knows how to coordinate.
     """
-    return f"""\
+    prompt = f"""\
 ## ClawTeam Runtime
 
 You are running inside ClawTeam, an agent orchestration framework.
@@ -36,6 +36,13 @@ Your identity: **{agent_name}** in team **{team}**.
 7. If idle, signal with `clawteam lifecycle idle {team}`
 8. The harness manages your lifecycle — focus on the task at hand
 """
+
+    from clawteam.team.manager import TeamManager
+
+    team_prompt = TeamManager.get_team_prompt(team)
+    if team_prompt:
+        prompt += "\n## Team Instructions\n\n" + team_prompt
+    return prompt
 
 
 def build_wrapped_prompt(

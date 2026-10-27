@@ -1,4 +1,4 @@
-"""Lightweight HTTP server for the Web UI dashboard (stdlib only)."""
+"""HTTP server for the Web UI dashboard and live agent terminals."""
 
 from __future__ import annotations
 
@@ -11,9 +11,10 @@ import urllib.request
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from clawteam.board.collector import BoardCollector
+from clawteam.board.terminal import TerminalTickets, list_terminals, same_origin, stream_terminal
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _ALLOWED_PROXY_HOSTS = {
@@ -38,13 +39,7 @@ def _is_blocked_hostname(hostname: str) -> bool:
         ip = ipaddress.ip_address(host)
     except ValueError:
         return False
-    return (
-        ip.is_loopback
-        or ip.is_private
-        or ip.is_link_local
-        or ip.is_multicast
-        or ip.is_reserved
-    )
+    return ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_multicast or ip.is_reserved
 
 
 def _normalize_proxy_target(target_url: str) -> str:
@@ -124,22 +119,43 @@ class BoardHandler(BaseHTTPRequestHandler):
     default_team: str = ""
     interval: float = 2.0
     team_cache: TeamSnapshotCache
+    terminal_tickets = TerminalTickets()
 
     def do_GET(self):
         path = self.path.split("?")[0]
 
         if path == "/" or path == "/index.html":
             self._serve_static("index.html", "text/html")
+        elif path == "/terminals.html":
+            self._serve_static("terminals.html", "text/html")
+        elif path == "/terminals.js":
+            self._serve_static("terminals.js", "text/javascript")
+        elif path.startswith("/vendor/ghostty-web/"):
+            filename = path.removeprefix("/vendor/ghostty-web/")
+            if filename in {"ghostty-web.js", "__vite-browser-external-2447137e.js"}:
+                self._serve_static("vendor/ghostty-web/" + filename, "text/javascript")
+            else:
+                self.send_error(404)
+        elif path == "/api/terminal/ws":
+            stream_terminal(self, self.terminal_tickets)
         elif path == "/api/overview":
             self._serve_json(self.collector.collect_overview())
+        elif path.startswith("/api/team/") and path.endswith("/terminals"):
+            try:
+                team = unquote(path[len("/api/team/") : -len("/terminals")])
+                self._serve_json({"team": team, "members": list_terminals(team)}, cors=False)
+            except (ValueError, OSError) as exc:
+                self._serve_json({"error": str(exc)}, status=400, cors=False)
+        elif path.startswith("/api/team/") and path.endswith("/prompt"):
+            self._serve_team_prompt(unquote(path[len("/api/team/") : -len("/prompt")]))
         elif path.startswith("/api/team/"):
-            team_name = path[len("/api/team/"):].strip("/")
+            team_name = path[len("/api/team/") :].strip("/")
             if not team_name:
                 self.send_error(400, "Team name required")
                 return
             self._serve_team(team_name)
         elif path.startswith("/api/events/"):
-            team_name = path[len("/api/events/"):].strip("/")
+            team_name = path[len("/api/events/") :].strip("/")
             if not team_name:
                 self.send_error(400, "Team name required")
                 return
@@ -165,6 +181,27 @@ class BoardHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split("?")[0]
+        if path == "/api/terminal/ticket":
+            if not same_origin(self.headers):
+                self._serve_json(
+                    {"error": "Terminal requests require the same origin"}, status=403, cors=False
+                )
+                return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if not 0 < length <= 32768:
+                    raise ValueError("Invalid terminal request size")
+                payload = json.loads(self.rfile.read(length).decode("utf-8"))
+                if not isinstance(payload, dict):
+                    raise ValueError("Terminal request must be an object")
+                token = self.terminal_tickets.issue(payload)
+                self._serve_json({"ticket": token}, cors=False)
+            except (ValueError, UnicodeError, OSError) as exc:
+                self._serve_json({"error": str(exc)}, status=400, cors=False)
+            return
+        if path.startswith("/api/team/") and path.endswith("/prompt"):
+            self._serve_team_prompt(unquote(path[len("/api/team/") : -len("/prompt")]), save=True)
+            return
         if path.startswith("/api/team/") and path.endswith("/task"):
             parts = path.strip("/").split("/")
             if len(parts) == 4 and parts[3] == "task":
@@ -174,17 +211,72 @@ class BoardHandler(BaseHTTPRequestHandler):
                 try:
                     payload = json.loads(body)
                     from clawteam.team.tasks import TaskStore
+
                     store = TaskStore(team_name)
                     task = store.create(
                         subject=payload.get("subject", ""),
                         description=payload.get("description", ""),
-                        owner=payload.get("owner", "")
+                        owner=payload.get("owner", ""),
                     )
                     self._serve_json({"status": "ok", "task_id": task.id})
                 except Exception as e:
                     self.send_error(400, str(e))
                 return
         self.send_error(404)
+
+    def _serve_team_prompt(self, team_name: str, *, save: bool = False):
+        from clawteam.team.manager import TeamManager
+
+        try:
+            prompt = TeamManager.get_team_prompt(team_name)
+            if prompt is None:
+                self._serve_json({"error": "Team not found"}, status=404)
+                return
+            if not save:
+                self._serve_json({"prompt": prompt})
+                return
+            length = int(self.headers.get("Content-Length", "0"))
+            if length < 0 or length > 1024 * 1024:
+                self._serve_json({"error": "Prompt request is too large"}, status=413)
+                return
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            if not isinstance(payload, dict) or "prompt" not in payload:
+                raise ValueError("A prompt field is required")
+            prompt = payload["prompt"]
+            changed = TeamManager.set_team_prompt(team_name, prompt)
+        except (ValueError, UnicodeError) as exc:
+            self._serve_json({"error": str(exc)}, status=400)
+            return
+        except OSError:
+            self._serve_json({"error": "Unable to read or save the team prompt"}, status=500)
+            return
+
+        notified = 0
+        warning = ""
+        if changed:
+            from clawteam.team.mailbox import MailboxManager
+
+            content = (
+                "The shared team prompt has been updated. Replace the previous team instructions "
+                "with the following on your next inbox check:\n\n" + prompt
+                if prompt
+                else "The shared team prompt has been cleared. Stop applying its previous instructions."
+            )
+            try:
+                mailbox = MailboxManager(team_name)
+                for member in TeamManager.list_members(team_name):
+                    mailbox.send(
+                        from_agent="board",
+                        to=TeamManager.inbox_name_for(member),
+                        content=content,
+                        key="team-prompt",
+                    )
+                    notified += 1
+            except Exception:
+                warning = (
+                    "Prompt saved, but some members could not be notified. Restart them to load it."
+                )
+        self._serve_json({"prompt": prompt, "notified": notified, "warning": warning})
 
     def _serve_static(self, filename: str, content_type: str):
         filepath = _STATIC_DIR / filename
@@ -198,12 +290,15 @@ class BoardHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(content)
 
-    def _serve_json(self, data):
+    def _serve_json(self, data, status: int = 200, *, cors: bool = True):
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
-        self.send_response(200)
+        self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        if cors:
+            self.send_header("Access-Control-Allow-Origin", "*")
+        else:
+            self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 
@@ -245,7 +340,7 @@ class BoardHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         # Suppress default stderr logging for SSE connections
         first = str(args[0]) if args else ""
-        if "/api/events/" not in first:
+        if "/api/events/" not in first and "/api/terminal/" not in first:
             super().log_message(format, *args)
 
 

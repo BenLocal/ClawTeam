@@ -854,3 +854,59 @@ MIT License — free to use, modify, and distribute.
   <em>Thanks for visiting ✨ ClawTeam!</em><br><br>
   <img src="https://visitor-badge.laobi.icu/badge?page_id=HKUDS.ClawTeam&style=for-the-badge&color=00d4ff" alt="Views">
 </p>
+
+## Team prompts
+
+Open the Web dashboard, select a team, and click **Team Prompt** to save shared instructions such as repository locations, test environments, issue tracker or Vikunja project links, and development workflows. Reopen the editor to review or update them; saving empty text clears them.
+
+Instructions are stored in `teams/<team>/prompt.md` under the ClawTeam data directory (by default `~/.clawteam`). They are scoped to that team, survive restarts, and load into newly spawned agents and `clawteam run` sessions. Saving changes sends current members an inbox update; they apply it when they next check their inbox. A saved prompt does not interrupt an active model response.
+
+The existing **Set Context** action still creates a project specification analysis task. Keep passwords and API tokens in environment variables rather than the team prompt.
+
+## Live agent terminals
+
+Select a team in the Web dashboard and click **Live terminals**. Each member has
+a live terminal, connection status, and current task. Choose **Take control** to
+send keyboard input, paste text, or interrupt with Ctrl+C; **Release control**
+returns to watching. Only one viewer can control a member at a time. Closing the
+page detaches viewers and leaves agents running.
+
+Scroll up or click **History** to browse the tmux scrollback, including output
+from before the browser connected. Page Up/Down and Home/End navigate history;
+**Back to live** or Esc returns to the live terminal. History is an independent
+snapshot, so browsing it does not put the agent's pane into copy mode. Keyboard
+input is paused while viewing history. Up to 5,000 retained lines are loaded;
+output already discarded by tmux cannot be recovered.
+
+To start the terminal dashboard from the command line:
+
+```bash
+clawteam board terminals my-team --port 8080
+```
+
+Open the printed URL in a browser. This requires tmux agents on the same machine
+and under the same OS user as the board. Other backends appear as unavailable.
+For tiled tmux windows, a terminal displays the shared window containing that
+agent. These are shared tmux windows, so resizing a browser terminal may also
+change the agent's terminal layout.
+
+The terminal renderer is [ghostty-web](https://github.com/coder/ghostty-web) 0.4.0,
+served locally, including its WebAssembly parser. Remote proxies must forward
+WebSocket upgrades and preserve the original Host header. Terminal requests
+require the same origin and a short-lived, single-use connection ticket. The
+board has no built-in login; expose it only to trusted users or behind an
+authenticated proxy because controlling a terminal uses the agent's OS permissions.
+
+For Nginx, place these headers in the location that proxies the board, including
+when that location already sets other headers such as `Accept-Encoding`:
+
+```nginx
+proxy_http_version 1.1;
+proxy_set_header Host $http_host;
+proxy_set_header Upgrade $http_upgrade;
+proxy_set_header Connection "upgrade";
+```
+
+Nginx does not inherit parent `proxy_set_header` directives when a location sets
+its own. A missing original Host header causes "Terminal requests require the
+same origin"; missing upgrade headers prevent the terminal stream from connecting.

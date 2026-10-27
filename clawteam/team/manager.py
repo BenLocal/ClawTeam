@@ -6,9 +6,12 @@ import json
 import shutil
 from pathlib import Path
 
+from clawteam.fileutil import atomic_write_text
 from clawteam.paths import ensure_within_root, validate_identifier
 from clawteam.team.models import TeamConfig, TeamMember, get_data_dir
 from clawteam.team.plan import referenced_legacy_plan_paths, team_plans_path
+
+MAX_TEAM_PROMPT_LENGTH = 65536
 
 
 def _teams_root() -> Path:
@@ -40,10 +43,9 @@ def _save_config(config: TeamConfig) -> None:
     path = _config_path(config.name)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(
-        config.model_dump_json(indent=2, by_alias=True), encoding="utf-8"
-    )
+    tmp.write_text(config.model_dump_json(indent=2, by_alias=True), encoding="utf-8")
     import os
+
     os.replace(str(tmp), str(path))
 
 
@@ -124,17 +126,40 @@ class TeamManager:
                 except ValueError:
                     continue
                 if config:
-                    teams.append({
-                        "name": config.name,
-                        "description": config.description,
-                        "leadAgentId": config.lead_agent_id,
-                        "memberCount": len(config.members),
-                    })
+                    teams.append(
+                        {
+                            "name": config.name,
+                            "description": config.description,
+                            "leadAgentId": config.lead_agent_id,
+                            "memberCount": len(config.members),
+                        }
+                    )
         return teams
 
     @staticmethod
     def get_team(name: str) -> TeamConfig | None:
         return _load_config(name)
+
+    @staticmethod
+    def get_team_prompt(team_name: str) -> str | None:
+        """Return shared instructions, or None when the team does not exist."""
+        if not TeamManager.team_exists(team_name):
+            return None
+        path = _team_dir(team_name) / "prompt.md"
+        return path.read_text(encoding="utf-8") if path.exists() else ""
+
+    @staticmethod
+    def set_team_prompt(team_name: str, prompt: str) -> bool:
+        """Save shared instructions atomically; return whether they changed."""
+        if not isinstance(prompt, str) or len(prompt) > MAX_TEAM_PROMPT_LENGTH:
+            raise ValueError(f"Prompt must be text of at most {MAX_TEAM_PROMPT_LENGTH} characters")
+        previous = TeamManager.get_team_prompt(team_name)
+        if previous is None:
+            raise ValueError(f"Team '{team_name}' not found")
+        if previous == prompt:
+            return False
+        atomic_write_text(_team_dir(team_name) / "prompt.md", prompt)
+        return True
 
     @staticmethod
     def add_member(
@@ -194,6 +219,7 @@ class TeamManager:
         # Best-effort cleanup of git workspaces before removing dirs
         try:
             from clawteam.workspace import get_workspace_manager
+
             ws_mgr = get_workspace_manager()
             if ws_mgr:
                 ws_mgr.cleanup_team(team_name)

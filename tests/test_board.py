@@ -241,8 +241,9 @@ def test_serve_team_reads_fresh_snapshot_without_cache(monkeypatch):
         (),
         {
             "collect_team": staticmethod(
-                lambda team_name: calls.__setitem__("count", calls["count"] + 1)
-                or {"team": {"name": team_name}}
+                lambda team_name: (
+                    calls.__setitem__("count", calls["count"] + 1) or {"team": {"name": team_name}}
+                )
             )
         },
     )()
@@ -328,7 +329,9 @@ def test_proxy_rejects_redirect_to_disallowed_host(monkeypatch):
         def open(self, req, timeout=10):
             return FakeResponse("https://example.com/payload", b"redirected")
 
-    monkeypatch.setattr("clawteam.board.server.urllib.request.build_opener", lambda *_: FakeOpener())
+    monkeypatch.setattr(
+        "clawteam.board.server.urllib.request.build_opener", lambda *_: FakeOpener()
+    )
 
     with pytest.raises(ValueError, match="GitHub-hosted"):
         _fetch_proxy_content("https://raw.githubusercontent.com/org/repo/main/README.md")
@@ -359,9 +362,13 @@ def test_proxy_fetches_allowed_github_content(monkeypatch):
             seen["url"] = req.full_url
             return FakeResponse(req.full_url, b"ok")
 
-    monkeypatch.setattr("clawteam.board.server.urllib.request.build_opener", lambda *_: FakeOpener())
+    monkeypatch.setattr(
+        "clawteam.board.server.urllib.request.build_opener", lambda *_: FakeOpener()
+    )
 
-    assert _fetch_proxy_content("https://raw.githubusercontent.com/org/repo/main/README.md") == b"ok"
+    assert (
+        _fetch_proxy_content("https://raw.githubusercontent.com/org/repo/main/README.md") == b"ok"
+    )
     assert seen["url"] == "https://raw.githubusercontent.com/org/repo/main/README.md"
 
 
@@ -374,6 +381,6 @@ def test_board_ui_escapes_attacker_controlled_fields():
     assert "escapeHtml(m.toLabel || m.to || 'ALL')" in html
     assert "escapeHtml(t.owner || 'Unassigned')" in html
     assert "t.blockedBy.map(v => escapeHtml(v)).join(', ')" in html
-    assert "option.textContent =" in html
+    assert "name.textContent = team.name" in html
     assert "document.getElementById('ui-meta').innerText =" in html
-    assert "`${t.name || ''}${t.description ? ` - ${t.description}` : ''}`" in html
+    assert "node.title = team.description || team.name" in html

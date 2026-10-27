@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live terminals · ClawTeam</title>
+    <style>
+        :root { color-scheme: dark; font-family: 'Segoe UI', sans-serif; background: #10151e; color: #dfe6f1; }
+        * { box-sizing: border-box; }
+        body { margin: 0; }
+        button, a { -webkit-tap-highlight-color: transparent; }
+        button { font: inherit; cursor: pointer; }
+        button:focus-visible, a:focus-visible { outline: 2px solid #8eafff; outline-offset: 3px; }
+        button:disabled { cursor: default; opacity: .45; }
+        .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 18px; padding: 22px 28px; border-bottom: 1px solid #2c3546; }
+        .back { color: #a3b6d5; text-decoration: none; font-size: 14px; }
+        h1 { font-size: 22px; letter-spacing: -.5px; font-weight: 600; margin: 0; }
+        #team-name { color: #91b4f6; }
+        #summary { margin-left: auto; color: #a3b0c5; font-size: 13px; }
+        .intro { margin: 18px 28px; color: #a3b0c5; font-size: 14px; line-height: 1.6; }
+        #page-status { margin: 20px 28px; color: #eac79c; }
+        #page-status:empty { display: none; }
+        .terminals { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr)); gap: 18px; padding: 0 28px 28px; }
+        .terminal-card { display: flex; flex-direction: column; min-width: 0; border: 1px solid #344054; border-radius: 9px; overflow: hidden; background: #121a26; }
+        .terminal-card.controlling { border-color: #e8b36b; }
+        .terminal-card:fullscreen { background: #10151e; padding: 12px; }
+        .card-head { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 13px 15px; }
+        .agent-name { font-weight: 600; font-size: 16px; overflow-wrap: anywhere; }
+        .agent-role { color: #8c9bb3; font-size: 12px; overflow-wrap: anywhere; }
+        .connection { color: #a3b0c5; font-size: 12px; margin-left: auto; }
+        .connection[data-state="connected"] { color: #8ac7ba; }
+        .card-actions { display: flex; gap: 8px; align-items: center; padding: 0 15px 12px; }
+        .card-actions { flex-wrap: wrap; }
+        .card-actions button { font-size: 12px; border: 1px solid #40516b; border-radius: 5px; padding: 6px 10px; background: #1d2b40; color: #dfe6f1; }
+        .card-actions .control { margin-left: auto; }
+        .controlling .control { background: #513e26; border-color: #e8b36b; color: #ffe4bc; }
+        .task { margin: 0; padding: 0 15px 12px; color: #a3b0c5; font-size: 12px; overflow-wrap: anywhere; }
+        .terminal-host { height: 390px; min-height: 200px; padding: 8px; overflow: hidden; background: #0d1119; }
+        .terminal-surface { height: 100%; width: 100%; }
+        .terminal-surface[hidden] { display: none; }
+        .history-note { color: #a8c8f6; font-size: 12px; padding: 0 15px 10px; margin: 0; line-height: 1.5; }
+        .history-note:empty { display: none; }
+        .terminal-card:fullscreen .terminal-host { flex: 1; height: auto; }
+        .terminal-card.offline .terminal-host { display: flex; align-items: center; justify-content: center; color: #899ab2; font-size: 14px; }
+        .card-error { padding: 8px 15px; margin: 0; color: #eac79c; font-size: 12px; }
+        .card-error:empty { display: none; }
+        @media (max-width: 600px) { .toolbar { padding: 18px 16px; gap: 12px; } .intro { margin: 14px 16px; } .terminals { padding: 0 12px 20px; gap: 14px; } #summary { margin-left: 0; } }
+    </style>
+</head>
+<body>
+    <header class="toolbar">
+        <a class="back" id="back-link" href="./">ClawTeam</a>
+        <h1>Live terminals <span id="team-name"></span></h1>
+        <span id="summary" role="status">Loading agents…</span>
+    </header>
+    <p class="intro">Watch every agent's terminal live. Scroll up or choose <strong>History</strong> to browse earlier output; <strong>Back to live</strong> resumes the stream. Choose <strong>Take control</strong> to type, paste, or send Ctrl+C. Closing this page leaves agents running.</p>
+    <p id="page-status" role="alert"></p>
+    <main class="terminals" id="terminals" aria-label="Team agent terminals"></main>
+    <script type="module" src="./terminals.js"></script>
+</body>
+</html>

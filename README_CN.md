@@ -604,3 +604,52 @@ MIT
   <em>感谢访问 ✨ ClawTeam！</em><br><br>
   <img src="https://visitor-badge.laobi.icu/badge?page_id=HKUDS.ClawTeam&style=for-the-badge&color=00d4ff" alt="Views">
 </p>
+
+## 团队提示词
+
+在 Web 面板中选择团队，点击 **Team Prompt**，可保存仓库位置、测试环境、Issue/Vikunja 项目链接和研发测试流程等团队共享说明。重新打开可查看和编辑，保存空文本可清除。
+
+内容保存在 ClawTeam 数据目录的 `teams/<team>/prompt.md`（默认位于 `~/.clawteam`），按团队隔离并在重启后保留。新启动的成员和 `clawteam run` 会话会自动加载；保存变更后，当前成员会收到收件箱更新，在下次检查收件箱时读取。保存不会打断正在进行的模型响应。
+
+原有 **Set Context** 仍用于创建项目资料分析任务。密码和 API Token 通过环境变量提供，不写入团队提示词。
+
+## Agent 终端直播
+
+在 Web 面板选择团队，点击 **Live terminals**，可同时观看每个成员的真实终端、
+连接状态及当前任务。点击 **Take control** 后可以输入、粘贴或按 Ctrl+C；点击
+**Release control** 恢复只读观看。同一个成员同时只允许一个观看者接管。
+关闭页面只断开观看连接，Agent 继续运行。
+
+滚轮上滑或点击 **History** 可查看 tmux 保留的历史，包括浏览器连接前的输出。
+可用 Page Up/Down、Home/End 翻阅，按 Esc 或 **Back to live** 返回直播。
+历史视图使用独立快照，不会让 Agent 进入复制模式；查看历史时暂停键盘输入。
+每次最多加载 5,000 行，tmux 已经丢弃的历史无法恢复。
+
+也可以从命令行启动：
+
+```bash
+clawteam board terminals my-team --port 8080
+```
+
+在浏览器打开输出的地址。面板需与 tmux Agent 运行在同一台机器、同一 OS 用户下；
+其他后端会显示为不可连接。若使用平铺 tmux，终端会显示该 Agent 所在的共享窗口。
+浏览器与 Agent 共享 tmux 窗口，调整观看窗口大小可能同时改变 Agent 的终端布局。
+
+终端使用本地提供的 [ghostty-web](https://github.com/coder/ghostty-web) 0.4.0，
+包括 WebAssembly 解析器，无需访问 CDN。反向代理需转发 WebSocket 升级并保留原始
+Host。终端请求校验同源并使用短期一次性连接票据。面板本身没有登录鉴权，接管操作
+具有 Agent 的 OS 权限，因此仅向可信用户开放，或置于带鉴权的代理之后。
+
+Nginx 需在代理面板的 location 内设置以下请求头，即使该 location 已设置
+`Accept-Encoding` 等其他请求头，也需完整保留：
+
+```nginx
+proxy_http_version 1.1;
+proxy_set_header Host $http_host;
+proxy_set_header Upgrade $http_upgrade;
+proxy_set_header Connection "upgrade";
+```
+
+location 内设置了 `proxy_set_header` 后，Nginx 不会继承上层的同类配置。
+原始 Host 未转发时会出现“Terminal requests require the same origin”；
+升级请求头缺失时，终端流无法连接。
