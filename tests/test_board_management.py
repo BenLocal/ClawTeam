@@ -220,8 +220,10 @@ def test_capabilities_advertise_management_operations(api):
     not os.environ.get("CLAWTEAM_HTTP_CLIENT"),
     reason="Set CLAWTEAM_HTTP_CLIENT for cross-repository client integration",
 )
-def test_skill_client_against_real_http_api(api, tmp_path):
+def test_skill_client_against_real_http_api(api, tmp_path, monkeypatch):
     client = os.environ["CLAWTEAM_HTTP_CLIENT"]
+    monkeypatch.setenv("CLAWTEAM_BOARD_API_KEY", "test-secret")
+    env = {**os.environ, "CLAWTEAM_API_KEY_FILE": ""}
 
     def run(*args):
         result = subprocess.run(
@@ -230,6 +232,7 @@ def test_skill_client_against_real_http_api(api, tmp_path):
             text=True,
             timeout=10,
             check=False,
+            env=env,
         )
         assert result.returncode == 0, result.stderr
         return json.loads(result.stdout)
@@ -242,6 +245,8 @@ def test_skill_client_against_real_http_api(api, tmp_path):
     broadcast = run("message", "broadcast", "--from", "leader", "--content", "通知")
     assert broadcast["count"] == 1
     assert len(run("agents")["agents"]) == 2
+    assert run("task", "get", created["task_id"])["status"] == "completed"
+    assert any(team["name"] == "demo" for team in run("overview"))
 
 
 @pytest.mark.parametrize(
@@ -354,6 +359,23 @@ def test_api_key_accepts_bearer_and_rejects_query_key(api, monkeypatch):
     assert api("/openapi/team/demo/broadcast", {"content": "external"}, headers=headers)[0] == 200
     assert api("/openapi/team/demo/agents", headers=headers)[0] == 200
     assert api("/openapi/capabilities?api_key=test-secret")[0] == 401
+
+
+def test_openapi_exposes_read_only_snapshots(api, monkeypatch):
+    monkeypatch.setenv("CLAWTEAM_BOARD_API_KEY", "test-secret")
+    headers = {"Authorization": "Bearer test-secret"}
+    status, data, _ = api("/openapi/overview", headers=headers)
+    assert status == 200
+    assert any(team["name"] == "demo" for team in data)
+    status, data, _ = api("/openapi/team/demo", headers=headers)
+    assert status == 200
+    assert data["team"]["name"] == "demo"
+    for path in (
+        "/openapi/team/demo/messages",
+        "/openapi/team/demo/task/missing",
+        "/openapi/proxy",
+    ):
+        assert api(path, headers=headers)[0] == 404
 
 
 @pytest.mark.parametrize("key", [None, ""])

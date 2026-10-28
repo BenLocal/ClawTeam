@@ -48,7 +48,7 @@ Errors return a JSON `error`; validation errors also include field details witho
 
 External clients use `/openapi/` in place of `/api/` for the management endpoints above. Set `CLAWTEAM_BOARD_API_KEY` in the Board server environment and send `Authorization: Bearer <key>`. Every `/openapi/` request requires a valid key; an unset or empty server key disables external access. Missing or incorrect keys return 401 before any operation. Keys in query strings are not accepted. Use HTTPS for network access.
 
-The browser dashboard continues to use `/api/` without API key authentication. Expose only `/openapi/` through the public reverse proxy; keep `/api/` and the dashboard restricted to the trusted network or existing deployment authentication. The external namespace exposes only the documented management operations, not prompts, terminals, events, or the fetch proxy. Browser management calls must be same-origin. Non-browser HTTP clients may omit `Origin`. Write responses do not expose wildcard CORS. Keep the Board behind the deployment's access controls, as with its existing writable terminals.
+The browser dashboard continues to use `/api/` without API key authentication. Expose only `/openapi/` through the public reverse proxy; keep `/api/` and the dashboard restricted to the trusted network or existing deployment authentication. The external namespace exposes the documented management operations plus read-only `GET` snapshots: `/overview`, `/team/{team}`, and the SSE stream `/events/{team}`. It does not expose prompts, terminals, or the fetch proxy. Browser management calls must be same-origin. Non-browser HTTP clients may omit `Origin`. Write responses do not expose wildcard CORS. Keep the Board behind the deployment's access controls, as with its existing writable terminals.
 
 Launches are serialized within one Board process. A 60-second launcher timeout returns 504; an agent may already have started. Failed or interrupted writes are never automatically retried. Query task, message, or runtime state before retrying, including after an HTTP client timeout. Broadcast delivery may be partial if storage fails during fan-out.
 
@@ -56,7 +56,7 @@ Launches are serialized within one Board process. A 60-second launcher timeout r
 
 ```bash
 python -m pytest tests/test_board_management.py tests/test_board.py tests/test_spawn_cli.py -q
-CLAWTEAM_HTTP_CLIENT=/path/to/ClawTeam-Docker/skills/clawteam/scripts/clawteam_cli.py \
+CLAWTEAM_HTTP_CLIENT=/path/to/ClawTeam-Docker/skills/clawteam/scripts/clawteam.py \
   python -m pytest tests/test_board_management.py -q
 ```
 

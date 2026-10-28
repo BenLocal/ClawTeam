@@ -137,14 +137,22 @@ class BoardHandler(BaseHTTPRequestHandler):
             path = self.path.split("?", 1)[0]
             parts = path.strip("/").split("/")
             operation = "/".join(parts[3:])
-            allowed = path == "/openapi/capabilities" or (
-                len(parts) >= 4
-                and parts[1] == "team"
-                and (
-                    operation in {"agents", "task", "messages", "broadcast", "agents/spawn"}
-                    or (len(parts) == 5 and parts[3] == "task")
+            if self.command == "GET":
+                # Read-only snapshots; prompts, terminals and the fetch proxy stay internal.
+                allowed = (
+                    path in {"/openapi/capabilities", "/openapi/overview"}
+                    or (len(parts) == 3 and parts[1] in {"team", "events"})
+                    or (len(parts) == 4 and parts[1] == "team" and operation == "agents")
                 )
-            )
+            else:
+                allowed = (
+                    len(parts) >= 4
+                    and parts[1] == "team"
+                    and (
+                        operation in {"task", "messages", "broadcast", "agents/spawn"}
+                        or (len(parts) == 5 and parts[3] == "task")
+                    )
+                )
             if not allowed:
                 self._serve_json({"error": "Not found"}, status=404, cors=False)
                 return False
