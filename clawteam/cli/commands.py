@@ -3395,6 +3395,7 @@ def spawn_agent(
       tmux        - Launch in tmux windows (visual monitoring)
       subprocess  - Launch as background processes
     """
+    spawn_console = Console(stderr=True) if _json_output else console
     from clawteam.config import get_effective
     from clawteam.spawn import get_backend
     from clawteam.spawn.profiles import apply_profile, load_profile, resolve_profile_name
@@ -3406,7 +3407,7 @@ def spawn_agent(
     try:
         profile = resolve_profile_name(profile, command=list(command or []))
     except ValueError as e:
-        console.print(f"[red]{e}[/red]")
+        spawn_console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
 
     _team = team or "default"
@@ -3426,7 +3427,7 @@ def spawn_agent(
                         "Use --replace to stop it and spawn a new instance."
                     )
                 },
-                lambda d: console.print(f"[red]{d['error']}[/red]"),
+                lambda d: spawn_console.print(f"[red]{d['error']}[/red]"),
             )
             raise typer.Exit(1)
 
@@ -3438,7 +3439,7 @@ def spawn_agent(
                         "Retry after the existing process exits."
                     )
                 },
-                lambda d: console.print(f"[red]{d['error']}[/red]"),
+                lambda d: spawn_console.print(f"[red]{d['error']}[/red]"),
             )
             raise typer.Exit(1)
 
@@ -3451,7 +3452,7 @@ def spawn_agent(
         be = get_backend(backend)
     except ValueError as e:
         message = str(e) + _spawn_backend_hint(backend, team)
-        _output({"error": message}, lambda d: console.print(f"[red]{d['error']}[/red]"))
+        _output({"error": message}, lambda d: spawn_console.print(f"[red]{d['error']}[/red]"))
         raise typer.Exit(1)
 
     # Workspace: resolve from flag or config (default: auto)
@@ -3472,13 +3473,15 @@ def spawn_agent(
         ws_mgr = get_workspace_manager(repo)
         if ws_mgr is None:
             if ws_mode not in ("auto", ""):
-                console.print("[red]Not in a git repository. Use --repo or cd into a repo.[/red]")
+                spawn_console.print(
+                    "[red]Not in a git repository. Use --repo or cd into a repo.[/red]"
+                )
                 raise typer.Exit(1)
         else:
             ws_info = ws_mgr.create_workspace(team_name=_team, agent_name=_name, agent_id=_id)
             cwd = ws_info.worktree_path
             ws_branch = ws_info.branch_name
-            console.print(f"[dim]Workspace: {cwd} (branch: {ws_branch})[/dim]")
+            spawn_console.print(f"[dim]Workspace: {cwd} (branch: {ws_branch})[/dim]")
     elif repo:
         import os as _os_repo
 
@@ -3493,7 +3496,7 @@ def spawn_agent(
                 command=list(command or []),
             )
         except ValueError as e:
-            console.print(f"[red]{e}[/red]")
+            spawn_console.print(f"[red]{e}[/red]")
             raise typer.Exit(1)
     elif not command:
         command = ["claude"]
@@ -3561,7 +3564,7 @@ def spawn_agent(
             resumed_command = build_cli_resume_command(command, session.session_id, client=client)
             if resumed_command != list(command):
                 command = resumed_command
-                console.print(f"[dim]Resuming session: {session.session_id}[/dim]")
+                spawn_console.print(f"[dim]Resuming session: {session.session_id}[/dim]")
             if prompt:
                 prompt += "\nYou are resuming a previous session."
 
@@ -3571,7 +3574,7 @@ def spawn_agent(
         for skill_name in skill:
             content = _load_skill_content(skill_name)
             if content is None:
-                console.print(
+                spawn_console.print(
                     f"[yellow]Warning: skill '{skill_name}' not found in ~/.claude/skills/[/yellow]"
                 )
                 continue
@@ -3605,7 +3608,7 @@ def spawn_agent(
                 ws_mgr.cleanup_workspace(_team, _name, auto_checkpoint=False)
             except Exception:
                 pass
-        _output({"error": result}, lambda d: console.print(f"[red]{d['error']}[/red]"))
+        _output({"error": result}, lambda d: spawn_console.print(f"[red]{d['error']}[/red]"))
         raise typer.Exit(1)
 
     _output(
@@ -3616,7 +3619,7 @@ def spawn_agent(
             "agentId": _id,
             "message": result,
         },
-        lambda d: console.print(f"[green]OK[/green] {d['message']}"),
+        lambda d: spawn_console.print(f"[green]OK[/green] {d['message']}"),
     )
 
 

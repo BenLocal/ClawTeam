@@ -910,3 +910,12 @@ proxy_set_header Connection "upgrade";
 Nginx does not inherit parent `proxy_set_header` directives when a location sets
 its own. A missing original Host header causes "Terminal requests require the
 same origin"; missing upgrade headers prevent the terminal stream from connecting.
+
+### Board management API
+
+The Board exposes HTTP endpoints for task updates, priority and dependency settings,
+message delivery, and agent launches. Clients can discover supported operations at
+`GET /api/capabilities`. See [Board management API](docs/board-api.md) for request
+schemas, response codes, and the deployment access boundary. Set
+`CLAWTEAM_BOARD_API_KEY` to enable Bearer-authenticated external endpoints under
+`/openapi/`. The dashboard keeps using `/api/` within the trusted network.
