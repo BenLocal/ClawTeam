@@ -7,6 +7,23 @@ const pageStatus = document.getElementById("page-status");
 const summary = document.getElementById("summary");
 let stopped = false;
 let refreshTimer;
+// Only the selected card takes the wheel; otherwise it scrolls the page.
+let selected = null;
+
+function select(card) {
+  if (selected === card) return;
+  selected?.element.classList.remove("selected");
+  selected = card;
+  card?.element.classList.add("selected");
+}
+
+document.addEventListener(
+  "pointerdown",
+  (event) => {
+    if (!event.target.closest?.(".terminal-card")) select(null);
+  },
+  { capture: true },
+);
 
 document.getElementById("team-name").textContent = team || "";
 const back = new URL("./", location.href);
@@ -56,10 +73,17 @@ class AgentTerminal {
       if (this.historyTerminal || this.historyLoading) this.closeHistory();
       else this.openHistory(-Math.max(5, this.terminal?.rows || 24));
     });
+    this.element.addEventListener("pointerdown", () => select(this));
+    this.element.addEventListener("focusin", () => select(this));
     this.host.addEventListener(
       "wheel",
       (event) => {
         if (event.ctrlKey || !event.deltaY) return;
+        if (selected !== this && document.fullscreenElement !== this.element) {
+          // Keep ghostty from consuming it, but let the browser scroll the page.
+          event.stopImmediatePropagation();
+          return;
+        }
         event.preventDefault();
         event.stopImmediatePropagation();
         const lines =
@@ -303,7 +327,10 @@ class AgentTerminal {
           : "Take control";
         this.setStatus(control ? "Controlling" : "Watching", "connected");
         this.fit();
-        if (control) this.terminal.focus();
+        if (control) {
+          select(this);
+          this.terminal.focus();
+        }
       };
       socket.onmessage = (event) => {
         if (generation !== this.generation) return;
@@ -348,6 +375,7 @@ class AgentTerminal {
   }
 
   dispose() {
+    if (selected === this) select(null);
     this.disposed = true;
     this.disconnect();
     this.observer.disconnect();

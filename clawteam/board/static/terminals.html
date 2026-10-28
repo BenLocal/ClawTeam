@@ -22,6 +22,7 @@
         #page-status:empty { display: none; }
         .terminals { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr)); gap: 18px; padding: 0 28px 28px; }
         .terminal-card { display: flex; flex-direction: column; min-width: 0; border: 1px solid #344054; border-radius: 9px; overflow: hidden; background: #121a26; }
+        .terminal-card.selected { box-shadow: 0 0 0 2px #8eafff; }
         .terminal-card.controlling { border-color: #e8b36b; }
         .terminal-card:fullscreen { background: #10151e; padding: 12px; }
         .card-head { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 13px 15px; }
@@ -53,7 +54,7 @@
         <h1>Live terminals <span id="team-name"></span></h1>
         <span id="summary" role="status">Loading agents…</span>
     </header>
-    <p class="intro">Watch every agent's terminal live. Scroll up or choose <strong>History</strong> to browse earlier output; <strong>Back to live</strong> resumes the stream. Choose <strong>Take control</strong> to type, paste, or send Ctrl+C. Closing this page leaves agents running.</p>
+    <p class="intro">Watch every agent's terminal live. Click a terminal to select it; the mouse wheel then scrolls that terminal, and with none selected it scrolls this page. In a selected terminal, scroll up or choose <strong>History</strong> to browse earlier output; <strong>Back to live</strong> resumes the stream. Choose <strong>Take control</strong> to type, paste, or send Ctrl+C. Closing this page leaves agents running.</p>
     <p id="page-status" role="alert"></p>
     <main class="terminals" id="terminals" aria-label="Team agent terminals"></main>
     <script type="module" src="./terminals.js"></script>
