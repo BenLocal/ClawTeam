@@ -221,3 +221,69 @@ def test_opencode_locator_uses_session_list(monkeypatch, tmp_path):
 
     assert captured is not None
     assert captured.session_id == "opencode-session-1"
+
+
+def _dsh_session(home: Path, project_key: str, session_id: str, mtime: float) -> None:
+    session_dir = home / "sessions" / project_key / session_id
+    session_dir.mkdir(parents=True)
+    log = session_dir / "session.v4.jsonl.zstd"
+    log.write_bytes(b"")
+    import os
+
+    os.utime(log, (mtime, mtime))
+    os.utime(session_dir, (mtime, mtime))
+
+
+def test_dsh_locator_maps_tui_cwd_to_git_root(monkeypatch, tmp_path):
+    dsh_home = tmp_path / "dsh-home"
+    monkeypatch.setenv("DSH_HOME", str(dsh_home))
+    repo = tmp_path / "work" / "repo"
+    (repo / "src").mkdir(parents=True)
+    (repo / ".git").write_text("gitdir: elsewhere", encoding="utf-8")
+    key = "--" + str(repo).lstrip("/").replace("/", "-") + "--"
+    _dsh_session(dsh_home, key, "old-session", 1_000.0)
+    _dsh_session(dsh_home, key, "new-session", 2_000.0)
+
+    captured = locator_for_client("dsh").current_session(  # type: ignore[union-attr]
+        SessionContext(team_name="demo", agent_name="ds", cwd=str(repo / "src"))
+    )
+
+    assert captured is not None
+    assert captured.session_id == "new-session"
+
+
+def test_dsh_capture_ignores_sessions_older_than_spawn(monkeypatch, tmp_path):
+    dsh_home = tmp_path / "dsh-home"
+    monkeypatch.setenv("DSH_HOME", str(dsh_home))
+    cwd = tmp_path / "work"
+    cwd.mkdir()
+    key = "--" + str(cwd).lstrip("/").replace("/", "-") + "--"
+    _dsh_session(dsh_home, key, "stale-session", 1_000.0)
+    locator = locator_for_client("dsh")
+    context = SessionContext(team_name="demo", agent_name="ds", cwd=str(cwd), started_at=1_500.0)
+    prepared = locator.prepare(["dsh", "tui"], context)  # type: ignore[union-attr]
+
+    assert prepared.async_capture
+    assert locator.capture(prepared, context) is None  # type: ignore[union-attr]
+
+    _dsh_session(dsh_home, key, "fresh-session", 2_000.0)
+    captured = locator.capture(prepared, context)  # type: ignore[union-attr]
+    assert captured is not None
+    assert captured.session_id == "fresh-session"
+
+
+def test_dsh_resume_command_per_profile():
+    assert build_resume_command(["dsh", "tui"], "sid-1") == ["dsh", "tui", "--resume", "sid-1"]
+    assert build_resume_command(["dsh", "--profile", "headless"], "sid-1") == [
+        "dsh",
+        "--profile",
+        "headless",
+        "--session-id",
+        "sid-1",
+    ]
+    assert build_resume_command(["dsh", "tui", "--resume", "sid-0"], "sid-1") == [
+        "dsh",
+        "tui",
+        "--resume",
+        "sid-0",
+    ]

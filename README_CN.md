@@ -483,8 +483,15 @@ clawteam spawn subprocess <your-agent> --team my-team --agent-name test --task "
 | [OpenClaw](https://github.com/openclaw/openclaw) | `clawteam spawn tmux openclaw --team ...` | ✅ 完全支持 |
 | [nanobot](https://github.com/HKUDS/nanobot) | `clawteam spawn tmux nanobot --team ...` | ✅ 完全支持 |
 | [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | `clawteam spawn tmux kimi --team ...` | ✅ 完全支持 |
+| [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) TUI | `clawteam spawn tmux dsh tui --team ...` | ✅ 完全支持 |
 | [Cursor](https://cursor.com) | `clawteam spawn subprocess cursor --team ...` | 🔮 实验性 |
 | 自定义脚本 | `clawteam spawn subprocess python --team ...` | ✅ 完全支持 |
+
+`dsh tui` 需要先在 dsh 的 `tui` profile 装一个 TUI 插件，例如
+`dsh plugin --profile tui add @deepseek-harness-tui/dsh-tui`。命令写成 `dsh tui`，不要写
+`dsh --profile tui`，后者会和 ClawTeam 自己的 `--profile` 冲突。`--skip-permissions` 会设置
+`DSH_PERMISSION_MODE=danger-full-access`：dsh 默认的 `workspace-write` 沙箱不允许写 ClawTeam
+数据目录，Worker 会停在无人处理的审批上。
 
 像 “Claude Code 走 Moonshot Kimi”、”Claude Code 走 MiniMax” 或 “Gemini 走 Vertex” 这类 provider-aware 场景，
 推荐先用 `profile` + `preset` 配好，再通过 `--profile` 启动。

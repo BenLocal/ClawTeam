@@ -547,8 +547,15 @@ All examples below assume the corresponding CLI already runs standalone on your 
 | [OpenClaw](https://github.com/openclaw/openclaw) | `clawteam spawn tmux openclaw --team ...` | ✅ Full support |
 | [nanobot](https://github.com/HKUDS/nanobot) | `clawteam spawn tmux nanobot --team ...` | ✅ Full support |
 | [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | `clawteam spawn tmux kimi --team ...` | ✅ Full support |
+| [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) TUI | `clawteam spawn tmux dsh tui --team ...` | ✅ Full support |
 | [Cursor](https://cursor.com) | `clawteam spawn subprocess cursor --team ...` | 🔮 Experimental |
 | Custom scripts | `clawteam spawn subprocess python --team ...` | ✅ Full support |
+
+`dsh tui` needs a TUI plugin in the dsh `tui` profile, for example
+`dsh plugin --profile tui add @deepseek-harness-tui/dsh-tui`. Write `dsh tui` rather than
+`dsh --profile tui`, which collides with ClawTeam's own `--profile`. `--skip-permissions`
+sets `DSH_PERMISSION_MODE=danger-full-access`: under dsh's default `workspace-write` sandbox
+a worker cannot write the ClawTeam data directory and waits for an approval no one gives.
 
 For provider-aware setups such as Claude Code via Moonshot Kimi, MiniMax, or Gemini via
 Vertex, use `profile` + `preset` and then spawn with `--profile`.

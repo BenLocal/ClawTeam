@@ -7,6 +7,8 @@ from unittest.mock import patch
 from clawteam.spawn.adapters import (
     NativeCliAdapter,
     command_basename,
+    dsh_profile,
+    is_dsh_command,
     is_interactive_cli,
     is_nanobot_command,
     is_opencode_command,
@@ -37,6 +39,23 @@ class TestCLIDetection:
         assert is_pi_command(["/usr/local/bin/pi"])
         assert not is_pi_command(["python"])
         assert not is_pi_command([])
+
+    def test_is_dsh_command(self):
+        assert is_dsh_command(["dsh", "tui"])
+        assert is_dsh_command(["/home/me/.local/bin/dsh"])
+        assert not is_dsh_command(["dst"])
+        assert not is_dsh_command([])
+
+    def test_dsh_profile_reads_positional_and_flag_forms(self):
+        assert dsh_profile(["dsh", "tui"]) == "tui"
+        assert dsh_profile(["dsh", "--patch", "x.yml", "tui"]) == "tui"
+        assert dsh_profile(["dsh", "--profile", "headless"]) == "headless"
+        assert dsh_profile(["dsh", "--profile=web"]) == "web"
+        assert dsh_profile(["dsh"]) == ""
+
+    def test_dsh_tui_is_interactive_but_headless_is_not(self):
+        assert is_interactive_cli(["dsh", "tui"])
+        assert not is_interactive_cli(["dsh", "--profile", "headless"])
 
     def test_is_interactive_cli_covers_all_known(self):
         for cmd in ["claude", "codex", "nanobot", "gemini", "kimi", "qwen", "opencode", "pi"]:
@@ -70,6 +89,17 @@ class TestPrepareCommandSkipPermissions:
             ["opencode"], skip_permissions=True,
         )
         assert "--yolo" in result.final_command
+
+    def test_dsh_pins_full_access_through_env(self):
+        result = self.adapter.prepare_command(
+            ["dsh", "tui"], skip_permissions=True,
+        )
+        assert result.final_command == ["dsh", "tui"]
+        assert result.env == {"DSH_PERMISSION_MODE": "danger-full-access"}
+
+    def test_dsh_keeps_profile_permissions_without_skip(self):
+        result = self.adapter.prepare_command(["dsh", "tui"])
+        assert result.env == {}
 
     def test_claude_unchanged(self):
         result = self.adapter.prepare_command(
@@ -126,6 +156,19 @@ class TestPrepareCommandPrompt:
         )
         assert result.post_launch_prompt is None
         assert "hello" in result.final_command
+
+    def test_dsh_tui_takes_positional_prompt(self):
+        result = self.adapter.prepare_command(
+            ["dsh", "tui", "--patch", "x.yml"], prompt="hello", interactive=True,
+        )
+        assert result.post_launch_prompt is None
+        assert result.final_command == ["dsh", "tui", "--patch", "x.yml", "hello"]
+
+    def test_dsh_headless_takes_positional_prompt(self):
+        result = self.adapter.prepare_command(
+            ["dsh", "--profile", "headless"], prompt="hello", interactive=False,
+        )
+        assert result.final_command == ["dsh", "--profile", "headless", "hello"]
 
     def test_gemini_interactive_uses_prompt_interactive_flag(self):
         result = self.adapter.prepare_command(

@@ -16,6 +16,7 @@ from clawteam.spawn.adapters import (
     NativeCliAdapter,
     is_claude_command,
     is_codex_command,
+    is_dsh_command,
     is_gemini_command,
     is_kimi_command,
     is_nanobot_command,
@@ -111,6 +112,7 @@ class TmuxBackend(SpawnBackend):
         validation_command = normalized_command
         final_command = list(prepared.final_command)
         post_launch_prompt = prepared.post_launch_prompt
+        env_vars.update(prepared.env)
         if system_prompt and (
             is_claude_command(normalized_command) or is_pi_command(normalized_command)
         ):
@@ -277,6 +279,7 @@ class TmuxBackend(SpawnBackend):
             and not is_kimi_command(normalized_command)
             and not is_qwen_command(normalized_command)
             and not is_opencode_command(normalized_command)
+            and not is_dsh_command(normalized_command)
         ):
             # Other interactive TUIs still need the screen to be live before we
             # inject text via tmux send-keys.

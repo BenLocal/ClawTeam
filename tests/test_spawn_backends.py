@@ -1681,6 +1681,72 @@ def test_tmux_backend_opencode_skip_permissions_and_prompt(monkeypatch, tmp_path
     assert " opencode --yolo -p 'fix the bug'" in full_cmd
 
 
+def test_tmux_backend_dsh_prompt_as_argument_and_permission_env(monkeypatch, tmp_path):
+    run_calls = _make_tmux_spawn_harness(monkeypatch, tmp_path, "dsh")
+
+    backend = TmuxBackend()
+    result = backend.spawn(
+        command=["dsh", "tui"],
+        agent_name="coder",
+        agent_id="agent-d",
+        agent_type="general-purpose",
+        team_name="demo-team",
+        prompt="fix the bug",
+        cwd="/tmp/demo",
+        skip_permissions=True,
+    )
+
+    assert "spawned" in result
+    new_session = next(c for c in run_calls if c[:3] == ["tmux", "new-session", "-d"])
+    full_cmd = new_session[-1]
+    assert " dsh tui 'fix the bug'" in full_cmd
+    # The TUI submits its launch argument itself; typing it again would duplicate the task.
+    assert not any(c[:2] == ["tmux", "send-keys"] and "fix the bug" in c for c in run_calls)
+    assert not any(c[:2] == ["tmux", "paste-buffer"] for c in run_calls)
+
+    import re as _re
+
+    env_file = _re.search(r"\.\s+'?([^';\s]*/clawteam-env-[^';\s]+\.env\.sh)", full_cmd).group(1)
+    assert "export DSH_PERMISSION_MODE=danger-full-access" in open(env_file).read()
+
+
+def test_subprocess_backend_dsh_headless_permission_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    clawteam_bin = tmp_path / "venv" / "bin" / "clawteam"
+    clawteam_bin.parent.mkdir(parents=True)
+    clawteam_bin.write_text("#!/bin/sh\n")
+    monkeypatch.setattr(sys, "argv", [str(clawteam_bin)])
+
+    captured: dict[str, object] = {}
+
+    def fake_popen(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["env"] = kwargs["env"]
+        return DummyProcess()
+
+    monkeypatch.setattr(
+        "clawteam.spawn.command_validation.shutil.which",
+        lambda name, path=None: "/usr/bin/dsh" if name == "dsh" else None,
+    )
+    monkeypatch.setattr("clawteam.spawn.subprocess_backend.subprocess.Popen", fake_popen)
+    monkeypatch.setattr("clawteam.spawn.registry.register_agent", lambda **_: None)
+
+    backend = SubprocessBackend()
+    backend.spawn(
+        command=["dsh", "--profile", "headless"],
+        agent_name="coder",
+        agent_id="agent-d",
+        agent_type="general-purpose",
+        team_name="demo-team",
+        prompt="refactor this",
+        cwd="/tmp/demo",
+        skip_permissions=True,
+    )
+
+    assert "dsh --profile headless 'refactor this'" in captured["cmd"]
+    assert captured["env"]["DSH_PERMISSION_MODE"] == "danger-full-access"
+
+
 def test_subprocess_backend_qwen_skip_permissions_and_prompt(monkeypatch, tmp_path):
     monkeypatch.setenv("PATH", "/usr/bin:/bin")
     clawteam_bin = tmp_path / "venv" / "bin" / "clawteam"

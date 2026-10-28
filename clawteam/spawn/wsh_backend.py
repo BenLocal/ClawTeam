@@ -15,6 +15,7 @@ from clawteam.spawn.adapters import (
     NativeCliAdapter,
     is_claude_command,
     is_codex_command,
+    is_dsh_command,
     is_gemini_command,
 )
 from clawteam.spawn.base import SpawnBackend
@@ -278,8 +279,9 @@ class WshBackend(SpawnBackend):
         normalized_command = prepared.normalized_command
         validation_command = normalized_command
         final_command = list(prepared.final_command)
+        env_vars.update(prepared.env)
 
-        if prompt and is_claude_command(normalized_command):
+        if prompt and (is_claude_command(normalized_command) or is_dsh_command(normalized_command)):
             final_command.append(prompt)
 
         if system_prompt and is_claude_command(normalized_command):

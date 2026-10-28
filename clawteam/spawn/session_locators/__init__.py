@@ -13,6 +13,7 @@ from .base import (
 )
 from .claude import ClaudeSessionLocator
 from .codex import CodexSessionLocator, discover_codex_session
+from .dsh import DshSessionLocator
 from .gemini import GeminiSessionLocator
 from .nanobot import NanobotSessionLocator
 from .openclaw import OpenClawSessionLocator
@@ -25,6 +26,7 @@ _LOCATORS: list[SessionLocator] = [
     OpenCodeSessionLocator(),
     OpenClawSessionLocator(),
     NanobotSessionLocator(),
+    DshSessionLocator(),
 ]
 
 

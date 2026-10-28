@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from clawteam.spawn.cli_env import build_docker_clawteam_runtime
@@ -26,10 +26,12 @@ class PreparedCommand:
     normalized_command: list[str]
     final_command: list[str]
     post_launch_prompt: str | None = None
+    # Extra environment for runtimes configured through variables, not flags.
+    env: dict[str, str] = field(default_factory=dict)
 
 
 class NativeCliAdapter:
-    """Adapter for direct CLI runtimes such as claude, codex, gemini, kimi, nanobot, qwen, opencode."""
+    """Adapter for direct CLI runtimes such as claude, codex, gemini, kimi, nanobot, qwen, opencode, dsh."""
 
     def prepare_command(
         self,
@@ -45,6 +47,7 @@ class NativeCliAdapter:
         normalized_command = normalize_spawn_command(command)
         final_command = list(normalized_command)
         post_launch_prompt = None
+        env: dict[str, str] = {}
 
         if skip_permissions:
             # Claude Code rejects --dangerously-skip-permissions when running
@@ -62,6 +65,10 @@ class NativeCliAdapter:
                 or is_opencode_command(normalized_command)
             ):
                 final_command.append("--yolo")
+            elif is_dsh_command(normalized_command):
+                # dsh has no bypass flag; this deployment pin outranks the
+                # profile default and the TUI's remembered permission preset.
+                env["DSH_PERMISSION_MODE"] = "danger-full-access"
 
         if is_kimi_command(normalized_command):
             if cwd and not has_workspace_arg(normalized_command):
@@ -122,6 +129,11 @@ class NativeCliAdapter:
                     final_command.append(prompt)
                 else:
                     final_command.extend(["-p", prompt])
+        elif is_dsh_command(normalized_command):
+            # Both the TUI and headless profiles take the task as app arguments;
+            # the TUI submits it on boot, skipping its launchpad and setup guide.
+            if prompt:
+                final_command.append(prompt)
         elif is_gemini_command(normalized_command):
             if prompt:
                 if interactive:
@@ -143,6 +155,7 @@ class NativeCliAdapter:
             normalized_command=normalized_command,
             final_command=final_command,
             post_launch_prompt=post_launch_prompt,
+            env=env,
         )
 
 
@@ -222,6 +235,31 @@ def is_pi_command(command: list[str]) -> bool:
     return command_basename(command) == "pi"
 
 
+def is_dsh_command(command: list[str]) -> bool:
+    """Check if the command is a DeepSeek Harness (dsh) launcher invocation."""
+    return command_basename(command) == "dsh"
+
+
+def dsh_profile(command: list[str]) -> str:
+    """Return the profile a dsh launcher command boots, or "" when none is named."""
+    args = command[1:]
+    i = 0
+    while i < len(args):
+        token = args[i]
+        if token == "--profile":
+            return args[i + 1] if i + 1 < len(args) else ""
+        if token.startswith("--profile="):
+            return token.split("=", 1)[1]
+        if token in {"--patch", "--from-default-profile"}:
+            i += 2
+            continue
+        if token.startswith("-"):
+            i += 1
+            continue
+        return token
+    return ""
+
+
 def is_interactive_cli(command: list[str]) -> bool:
     """Check if the command is a known interactive AI coding CLI."""
     return (
@@ -234,4 +272,5 @@ def is_interactive_cli(command: list[str]) -> bool:
         or is_opencode_command(command)
         or is_openclaw_command(command)
         or is_pi_command(command)
+        or (is_dsh_command(command) and dsh_profile(command) != "headless")
     )
