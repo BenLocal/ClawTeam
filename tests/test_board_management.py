@@ -245,7 +245,8 @@ def test_skill_client_against_real_http_api(api, tmp_path, monkeypatch):
     broadcast = run("message", "broadcast", "--from", "leader", "--content", "通知")
     assert broadcast["count"] == 1
     assert len(run("agents")["agents"]) == 2
-    assert run("task", "get", created["task_id"])["status"] == "completed"
+    completed = run("team")["tasks"]["completed"]
+    assert [task["id"] for task in completed] == [created["task_id"]]
     assert any(team["name"] == "demo" for team in run("overview"))
 
 
